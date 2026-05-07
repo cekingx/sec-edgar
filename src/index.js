@@ -8,7 +8,7 @@ import { writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { getEdgarFilings, getEdgarHoldings } from "./edgar.js";
-import { totalValueUSD, printSummary } from "./analytics.js";
+import { totalValueUSD, printSummary, groupByCusip } from "./analytics.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR  = join(__dirname, "../public/data");
@@ -28,8 +28,11 @@ async function main() {
   const { reportDate, filingDate, form } = latest;
   console.log(`  Found: ${form} filed ${filingDate} (period: ${reportDate})`);
 
-  const holdings = await getEdgarHoldings(CIK, latest.accessionNumber);
-  console.log(`  ✓ EDGAR: ${holdings.length} holdings parsed`);
+  const rawHoldings = await getEdgarHoldings(CIK, latest.accessionNumber);
+  console.log(`  ✓ EDGAR: ${rawHoldings.length} raw holdings parsed`);
+
+  const holdings = groupByCusip(rawHoldings);
+  console.log(`  ✓ Grouped: ${holdings.length} unique CUSIPs`);
 
   printSummary(CIK, reportDate, holdings);
 

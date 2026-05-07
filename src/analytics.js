@@ -1,5 +1,16 @@
+export function groupByCusip(holdings) {
+  const byKey = {};
+  holdings.forEach(h => {
+    const key = h.cusip || h.issuer;
+    if (!byKey[key]) byKey[key] = { ...h, value_1000s: 0, shares: 0 };
+    byKey[key].value_1000s += h.value_1000s || 0;
+    byKey[key].shares += h.shares || 0;
+  });
+  return Object.values(byKey);
+}
+
 export function topHoldings(holdings, n = 20) {
-  return [...holdings]
+  return groupByCusip(holdings)
     .sort((a, b) => (b.value_1000s || 0) - (a.value_1000s || 0))
     .slice(0, n);
 }

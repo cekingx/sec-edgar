@@ -374,9 +374,16 @@
       document.getElementById("stat-value").textContent =
         totalT >= 1 ? `$${totalT.toFixed(2)}T` : `$${(json.total_value_usd / 1e9).toFixed(1)}B`;
 
-      allData = json.holdings
+      const byKey = {};
+      json.holdings.forEach(h => {
+        const key = h.cusip || h.issuer;
+        if (!byKey[key]) byKey[key] = { ...h, value_1000s: 0, shares: 0 };
+        byKey[key].value_1000s += h.value_1000s || 0;
+        byKey[key].shares += h.shares || 0;
+      });
+      allData = Object.values(byKey)
         .sort((a, b) => (b.value_1000s || 0) - (a.value_1000s || 0))
-        .slice(0, 10)
+        .slice(0, 20)
         .map((h, i) => ({ ...h, _origRank: i + 1 }));
       maxVal = Math.max(...allData.map(h => h.value_1000s));
 
