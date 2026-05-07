@@ -13,7 +13,8 @@
 import { parseStringPromise } from "xml2js";
 import { writeFileSync } from "fs";
 
-const BLACKROCK_CIK = "0002012383";
+const BLACKROCK_CIK = process.argv[2] || "0002012383";
+const TARGET_YEAR   = process.argv[3] ? parseInt(process.argv[3]) : null;
 const SEC_HEADERS   = { "User-Agent": "your-name your-email@example.com" };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,25 +35,42 @@ async function fetchText(url, headers = {}) {
 // PATH 2 — SEC EDGAR direct (always free, 10 req/sec limit)
 // ══════════════════════════════════════════════════════════════════════════════
 
-async function getEdgarFilings(cik) {
-  // EDGAR wants CIK zero-padded to 10 digits
-  const cikPadded = cik.replace(/^0+/, "").padStart(10, "0");
-  const url  = `https://data.sec.gov/submissions/CIK${cikPadded}.json`;
-  const data = await fetchJSON(url, SEC_HEADERS);
-
-  const recent = data.filings.recent;
+function extractFilings(batch) {
   const filings = [];
-
-  recent.form.forEach((form, i) => {
+  batch.form.forEach((form, i) => {
     if (form === "13F-HR" || form === "13F-HR/A") {
       filings.push({
-        accessionNumber: recent.accessionNumber[i],
-        filingDate:      recent.filingDate[i],
-        reportDate:      recent.reportDate[i],
+        accessionNumber: batch.accessionNumber[i],
+        filingDate:      batch.filingDate[i],
+        reportDate:      batch.reportDate[i],
         form,
       });
     }
   });
+  return filings;
+}
+
+async function getEdgarFilings(cik, targetYear = null) {
+  const cikPadded = cik.replace(/^0+/, "").padStart(10, "0");
+  const url  = `https://data.sec.gov/submissions/CIK${cikPadded}.json`;
+  const data = await fetchJSON(url, SEC_HEADERS);
+
+  let filings = extractFilings(data.filings.recent);
+
+  // If target year not found in recent batch, walk the paginated archive files
+  if (targetYear && !filings.some(f => f.reportDate.startsWith(String(targetYear)))) {
+    for (const file of (data.filings.files || [])) {
+      const archiveUrl = `https://data.sec.gov/submissions/${file.name}`;
+      const archive = await fetchJSON(archiveUrl, SEC_HEADERS);
+      const batch = extractFilings(archive);
+      filings = filings.concat(batch);
+      if (batch.some(f => f.reportDate.startsWith(String(targetYear)))) break;
+    }
+  }
+
+  if (targetYear) {
+    filings = filings.filter(f => f.reportDate.startsWith(String(targetYear)));
+  }
 
   return filings;
 }
@@ -156,7 +174,7 @@ async function main() {
   let date, holdings;
 
   console.log("Trying SEC EDGAR...");
-  const filings = await getEdgarFilings(BLACKROCK_CIK);
+  const filings = await getEdgarFilings(BLACKROCK_CIK, TARGET_YEAR);
 
   // Prefer original filing over amendment; use most recent
   const latest = filings.find((f) => f.form === "13F-HR") || filings[0];
@@ -179,8 +197,9 @@ async function main() {
     holdings,
   };
 
-  writeFileSync("blackrock_holdings.json", JSON.stringify(output, null, 2));
-  console.log("\n✓ Saved → blackrock_holdings.json");
+  const outFile = `holdings_${BLACKROCK_CIK}_${date}.json`;
+  writeFileSync(outFile, JSON.stringify(output, null, 2));
+  console.log(`\n✓ Saved → ${outFile}`);
 }
 
 main().catch((err) => {

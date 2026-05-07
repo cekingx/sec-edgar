@@ -240,7 +240,7 @@
 
   async function load() {
     try {
-      const res = await fetch("blackrock_holdings.json");
+      const res = await fetch("holdings_0001364742_2021-12-31.json");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
