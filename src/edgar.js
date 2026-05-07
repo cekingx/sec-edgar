@@ -53,6 +53,26 @@ export async function getEdgarFilings(cik, targetYear = null) {
   return filings;
 }
 
+export async function getLatestNFilings(cik, n = 4) {
+  const cikPadded = cik.replace(/^0+/, "").padStart(10, "0");
+  const url  = `https://data.sec.gov/submissions/CIK${cikPadded}.json`;
+  const data = await fetchJSON(url, SEC_HEADERS);
+
+  let filings = extractFilings(data.filings.recent);
+
+  for (const file of (data.filings.files || [])) {
+    if (filings.filter(f => f.form === "13F-HR").length >= n) break;
+    const archiveUrl = `https://data.sec.gov/submissions/${file.name}`;
+    const archive = await fetchJSON(archiveUrl, SEC_HEADERS);
+    filings = filings.concat(extractFilings(archive));
+  }
+
+  return filings
+    .filter(f => f.form === "13F-HR")
+    .sort((a, b) => b.reportDate.localeCompare(a.reportDate))
+    .slice(0, n);
+}
+
 export async function getEdgarHoldings(cik, accessionNumber) {
   const cikClean = cik.replace(/^0+/, "");
   const accClean = accessionNumber.replace(/-/g, "");

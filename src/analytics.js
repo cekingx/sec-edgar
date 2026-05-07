@@ -19,6 +19,45 @@ export function totalValueUSD(holdings) {
   return holdings.reduce((sum, h) => sum + (h.value_1000s || 0), 0) * 1000;
 }
 
+export function top20Cusips(holdings) {
+  return [...holdings]
+    .sort((a, b) => (b.value_1000s || 0) - (a.value_1000s || 0))
+    .slice(0, 20)
+    .map(h => h.cusip || h.issuer);
+}
+
+export function buildQuarterlyChanges(filingsData, top20CusipList) {
+  const dates = filingsData.map(f => f.date);
+
+  return top20CusipList.map(cusip => {
+    const issuer = filingsData
+      .map(f => f.holdings.find(h => (h.cusip || h.issuer) === cusip))
+      .find(h => h)?.issuer || cusip;
+
+    const quarters = dates.map(date => {
+      const filing = filingsData.find(f => f.date === date);
+      const h = filing?.holdings.find(h => (h.cusip || h.issuer) === cusip);
+      return {
+        date,
+        shares:      h ? (h.shares      ?? null) : null,
+        value_1000s: h ? (h.value_1000s ?? null) : null,
+      };
+    });
+
+    const deltas = quarters.slice(0, -1).map((q, i) => {
+      const next = quarters[i + 1];
+      const sharesNull  = q.shares      === null || next.shares      === null;
+      const valueNull   = q.value_1000s === null || next.value_1000s === null;
+      return {
+        shares:      sharesNull ? 0 : next.shares      - q.shares,
+        value_1000s: valueNull  ? 0 : next.value_1000s - q.value_1000s,
+      };
+    });
+
+    return { cusip, issuer, quarters, deltas };
+  });
+}
+
 export function printSummary(fund, date, holdings) {
   const top   = topHoldings(holdings, 20);
   const total = totalValueUSD(holdings);
