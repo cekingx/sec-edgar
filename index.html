@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>13F Holdings Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 600; color: #f1f5f9; }
+    header .meta { font-size: 0.8rem; color: #64748b; margin-left: auto; }
+
+    .stats {
+      display: flex;
+      gap: 1rem;
+      padding: 1.25rem 2rem;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 0.875rem 1.25rem;
+      min-width: 160px;
+    }
+
+    .stat-card .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 1.4rem; font-weight: 700; color: #f1f5f9; margin-top: 2px; }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0 2rem 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    input[type="search"] {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.875rem;
+      width: 260px;
+      outline: none;
+    }
+
+    input[type="search"]:focus { border-color: #6366f1; }
+
+    select {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.875rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select:focus { border-color: #6366f1; }
+
+    .table-wrap {
+      padding: 0 2rem 2rem;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    thead th {
+      background: #1a1d27;
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.65rem 0.875rem;
+      text-align: left;
+      border-bottom: 1px solid #2d3148;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    thead th:hover { color: #e2e8f0; }
+    thead th.sorted { color: #818cf8; }
+
+    thead th .arrow { margin-left: 4px; opacity: 0.5; }
+    thead th.sorted .arrow { opacity: 1; }
+
+    tbody tr {
+      border-bottom: 1px solid #1e2133;
+      transition: background 0.1s;
+    }
+
+    tbody tr:hover { background: #1e2133; }
+
+    td {
+      padding: 0.6rem 0.875rem;
+      white-space: nowrap;
+    }
+
+    td.rank { color: #475569; font-size: 0.78rem; width: 48px; }
+    td.issuer { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: #f1f5f9; font-weight: 500; }
+    td.cusip { color: #64748b; font-family: monospace; font-size: 0.8rem; }
+    td.class { color: #94a3b8; }
+    td.value { text-align: right; font-variant-numeric: tabular-nums; }
+    td.shares { text-align: right; font-variant-numeric: tabular-nums; color: #94a3b8; }
+    td.disc { color: #64748b; font-size: 0.78rem; }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .badge-call { background: #14532d; color: #4ade80; }
+    .badge-put  { background: #450a0a; color: #f87171; }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0 2rem 1.5rem;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    .pager button {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      color: #e2e8f0;
+      border-radius: 5px;
+      padding: 0.3rem 0.7rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .pager button:disabled { opacity: 0.35; cursor: default; }
+    .pager button:not(:disabled):hover { border-color: #6366f1; }
+
+    #status { padding: 4rem 2rem; text-align: center; color: #475569; }
+
+    .bar-wrap { display: flex; align-items: center; gap: 6px; }
+    .bar {
+      height: 6px;
+      border-radius: 3px;
+      background: #4f46e5;
+      min-width: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1 id="header-title">13F Holdings</h1>
+  <div class="meta" id="header-meta"></div>
+</header>
+
+<div class="stats">
+  <div class="stat-card"><div class="label">Period</div><div class="value" id="stat-date">—</div></div>
+  <div class="stat-card"><div class="label">Total Positions</div><div class="value" id="stat-positions">—</div></div>
+  <div class="stat-card"><div class="label">Total Value</div><div class="value" id="stat-value">—</div></div>
+</div>
+
+<div class="controls">
+  <input type="search" id="search" placeholder="Search issuer or CUSIP…" />
+  <select id="disc-filter">
+    <option value="">All discretion</option>
+    <option value="SOLE">SOLE</option>
+    <option value="SHARED">SHARED</option>
+    <option value="DFND">DEFINED</option>
+  </select>
+  <select id="page-size">
+    <option value="50">50 / page</option>
+    <option value="100">100 / page</option>
+    <option value="250">250 / page</option>
+  </select>
+</div>
+
+<div class="table-wrap">
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th data-col="rank">#</th>
+        <th data-col="issuer">Issuer</th>
+        <th data-col="cusip">CUSIP</th>
+        <th data-col="class">Class</th>
+        <th data-col="value_1000s" class="sorted">Value ($M) <span class="arrow">▼</span></th>
+        <th data-col="shares">Shares <span class="arrow"></span></th>
+        <th data-col="investDisc">Discretion <span class="arrow"></span></th>
+        <th data-col="putCall">Put/Call <span class="arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div class="pager">
+  <button id="btn-prev">← Prev</button>
+  <span id="pager-info"></span>
+  <button id="btn-next">Next →</button>
+</div>
+
+<div id="status">Loading blackrock_holdings.json…</div>
+
+<script>
+  let allData = [];
+  let filtered = [];
+  let sortCol = "value_1000s";
+  let sortDir = -1; // -1 = desc
+  let page = 0;
+  let pageSize = 50;
+  let maxVal = 1;
+
+  async function load() {
+    try {
+      const res = await fetch("blackrock_holdings.json");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+
+      document.getElementById("header-title").textContent = `${json.fund} — 13F Holdings`;
+      document.getElementById("header-meta").textContent = `Fetched ${new Date(json.fetched).toLocaleString()}`;
+      document.getElementById("stat-date").textContent = json.date;
+      document.getElementById("stat-positions").textContent = json.total_positions.toLocaleString();
+
+      const totalT = json.total_value_usd / 1e12;
+      document.getElementById("stat-value").textContent =
+        totalT >= 1 ? `$${totalT.toFixed(2)}T` : `$${(json.total_value_usd / 1e9).toFixed(1)}B`;
+
+      allData = json.holdings.map((h, i) => ({ ...h, _origRank: i + 1 }));
+      maxVal = Math.max(...allData.map(h => h.value_1000s));
+
+      document.getElementById("status").style.display = "none";
+      applyFilters();
+    } catch (e) {
+      document.getElementById("status").textContent = `Error: ${e.message}`;
+    }
+  }
+
+  function applyFilters() {
+    const q = document.getElementById("search").value.trim().toLowerCase();
+    const disc = document.getElementById("disc-filter").value;
+
+    filtered = allData.filter(h => {
+      if (q && !h.issuer.toLowerCase().includes(q) && !h.cusip.toLowerCase().includes(q)) return false;
+      if (disc && h.investDisc !== disc) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (typeof av === "string") av = av.toLowerCase(), bv = bv.toLowerCase();
+      return av < bv ? sortDir : av > bv ? -sortDir : 0;
+    });
+
+    page = 0;
+    render();
+  }
+
+  function render() {
+    pageSize = parseInt(document.getElementById("page-size").value);
+    const start = page * pageSize;
+    const slice = filtered.slice(start, start + pageSize);
+    const tbody = document.getElementById("tbody");
+
+    tbody.innerHTML = slice.map((h, i) => {
+      const rank = start + i + 1;
+      const valM = (h.value_1000s / 1000).toLocaleString("en-US", { maximumFractionDigits: 0 });
+      const barPct = Math.round((h.value_1000s / maxVal) * 120);
+      const shares = h.shares.toLocaleString();
+      const putCallBadge = h.putCall === "Call"
+        ? `<span class="badge badge-call">CALL</span>`
+        : h.putCall === "Put"
+        ? `<span class="badge badge-put">PUT</span>`
+        : `<span style="color:#475569">—</span>`;
+
+      return `<tr>
+        <td class="rank">${rank}</td>
+        <td class="issuer" title="${h.issuer}">${h.issuer}</td>
+        <td class="cusip">${h.cusip}</td>
+        <td class="class">${h.class}</td>
+        <td class="value">
+          <div class="bar-wrap">
+            <div class="bar" style="width:${barPct}px"></div>
+            <span>${valM}</span>
+          </div>
+        </td>
+        <td class="shares">${shares}</td>
+        <td class="disc">${h.investDisc}</td>
+        <td>${putCallBadge}</td>
+      </tr>`;
+    }).join("");
+
+    const total = filtered.length;
+    const end = Math.min(start + pageSize, total);
+    document.getElementById("pager-info").textContent =
+      total === 0 ? "No results" : `${start + 1}–${end} of ${total.toLocaleString()}`;
+    document.getElementById("btn-prev").disabled = page === 0;
+    document.getElementById("btn-next").disabled = end >= total;
+  }
+
+  // Sorting
+  document.querySelectorAll("thead th[data-col]").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (col === "rank") return;
+      if (sortCol === col) {
+        sortDir *= -1;
+      } else {
+        sortCol = col;
+        sortDir = col === "issuer" || col === "cusip" || col === "class" || col === "investDisc" || col === "putCall" ? 1 : -1;
+      }
+      document.querySelectorAll("thead th").forEach(t => {
+        t.classList.remove("sorted");
+        const a = t.querySelector(".arrow");
+        if (a) a.textContent = "";
+      });
+      th.classList.add("sorted");
+      const arrow = th.querySelector(".arrow") || (() => { const s = document.createElement("span"); s.className = "arrow"; th.appendChild(s); return s; })();
+      arrow.textContent = sortDir === -1 ? " ▼" : " ▲";
+      applyFilters();
+    });
+  });
+
+  document.getElementById("search").addEventListener("input", applyFilters);
+  document.getElementById("disc-filter").addEventListener("change", applyFilters);
+  document.getElementById("page-size").addEventListener("change", () => { page = 0; render(); });
+  document.getElementById("btn-prev").addEventListener("click", () => { page--; render(); });
+  document.getElementById("btn-next").addEventListener("click", () => { page++; render(); });
+
+  load();
+</script>
+</body>
+</html>
