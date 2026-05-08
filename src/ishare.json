@@ -1,0 +1,5 @@
+{
+  "IBIT": "https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf/1467271812596.ajax?fileType=csv&fileName=IBIT_holdings&dataType=fund",
+  "ETHA": "https://www.ishares.com/us/products/337614/ishares-ethereum-trust-etf/1467271812596.ajax?fileType=csv&fileName=ETHA_holdings&dataType=fund",
+  "AGG": "https://www.ishares.com/us/products/239458/ishares-core-total-us-bond-market-etf/1467271812596.ajax?fileType=csv&fileName=AGG_holdings&dataType=fund"
+}

@@ -8,7 +8,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "serve": "npx serve public -l 3000 --cors"
+    "serve": "npx serve public -l 3000 --cors",
+    "fetch:ishares": "node src/fetch-ishares.js"
   },
   "dependencies": {
     "xml2js": "^0.6.2"

@@ -31,7 +31,11 @@ async function main() {
   const rawHoldings = await getEdgarHoldings(CIK, latest.accessionNumber);
   console.log(`  ✓ EDGAR: ${rawHoldings.length} raw holdings parsed`);
 
-  const holdings = groupByCusip(rawHoldings);
+  const sole = rawHoldings.filter(h => h.investDisc === "SOLE" && !h.putCall);
+  if (sole.length < rawHoldings.length)
+    console.log(`  ✓ Filtered: dropped ${rawHoldings.length - sole.length} SHARED/DFND/options entries`);
+
+  const holdings = groupByCusip(sole);
   console.log(`  ✓ Grouped: ${holdings.length} unique CUSIPs`);
 
   printSummary(CIK, reportDate, holdings);

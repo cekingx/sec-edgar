@@ -2,8 +2,8 @@ export function groupByCusip(holdings) {
   const byKey = {};
   holdings.forEach(h => {
     const key = h.cusip || h.issuer;
-    if (!byKey[key]) byKey[key] = { ...h, value_1000s: 0, shares: 0 };
-    byKey[key].value_1000s += h.value_1000s || 0;
+    if (!byKey[key]) byKey[key] = { ...h, value_usd: 0, shares: 0 };
+    byKey[key].value_usd += h.value_usd || 0;
     byKey[key].shares += h.shares || 0;
   });
   return Object.values(byKey);
@@ -11,17 +11,17 @@ export function groupByCusip(holdings) {
 
 export function topHoldings(holdings, n = 20) {
   return groupByCusip(holdings)
-    .sort((a, b) => (b.value_1000s || 0) - (a.value_1000s || 0))
+    .sort((a, b) => (b.value_usd || 0) - (a.value_usd || 0))
     .slice(0, n);
 }
 
 export function totalValueUSD(holdings) {
-  return holdings.reduce((sum, h) => sum + (h.value_1000s || 0), 0) * 1000;
+  return holdings.reduce((sum, h) => sum + (h.value_usd || 0), 0);
 }
 
 export function top20Cusips(holdings) {
   return [...holdings]
-    .sort((a, b) => (b.value_1000s || 0) - (a.value_1000s || 0))
+    .sort((a, b) => (b.value_usd || 0) - (a.value_usd || 0))
     .slice(0, 20)
     .map(h => h.cusip || h.issuer);
 }
@@ -40,17 +40,17 @@ export function buildQuarterlyChanges(filingsData, top20CusipList) {
       return {
         date,
         shares:      h ? (h.shares      ?? null) : null,
-        value_1000s: h ? (h.value_1000s ?? null) : null,
+        value_usd: h ? (h.value_usd ?? null) : null,
       };
     });
 
     const deltas = quarters.slice(0, -1).map((q, i) => {
       const next = quarters[i + 1];
       const sharesNull  = q.shares      === null || next.shares      === null;
-      const valueNull   = q.value_1000s === null || next.value_1000s === null;
+      const valueNull   = q.value_usd === null || next.value_usd === null;
       return {
         shares:      sharesNull ? 0 : next.shares      - q.shares,
-        value_1000s: valueNull  ? 0 : next.value_1000s - q.value_1000s,
+        value_usd: valueNull  ? 0 : next.value_usd - q.value_usd,
       };
     });
 
@@ -77,7 +77,7 @@ export function printSummary(fund, date, holdings) {
 
   top.forEach((h, i) => {
     const issuer = (h.issuer || "").slice(0, 35).padEnd(35);
-    const valM   = (h.value_1000s / 1000).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const valM   = (h.value_usd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 0 });
     const shares = h.shares.toLocaleString();
     console.log(
       `${String(i + 1).padEnd(6)}${issuer} ${valM.padStart(11)}  ${shares.padStart(16)}`

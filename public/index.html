@@ -287,6 +287,7 @@
     .qtr-table th.sep,
     .qtr-table td.sep  { border-left: 1px solid var(--border); }
     .qtr-group-label   { background: var(--surface); color: var(--accent); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+
   </style>
 </head>
 <body>
@@ -333,7 +334,7 @@
           <th data-col="issuer" scope="col">Issuer</th>
           <th data-col="cusip" scope="col">CUSIP</th>
           <th data-col="class" scope="col">Class</th>
-          <th data-col="value_1000s" scope="col" class="sorted" aria-sort="descending">Value ($M) <span class="arrow">▼</span></th>
+          <th data-col="value_usd" scope="col" class="sorted" aria-sort="descending">Value ($M) <span class="arrow">▼</span></th>
           <th data-col="shares" scope="col">Shares <span class="arrow"></span></th>
           <th data-col="investDisc" scope="col">Discretion <span class="arrow"></span></th>
           <th data-col="putCall" scope="col">Put/Call <span class="arrow"></span></th>
@@ -358,6 +359,7 @@
     <select id="etf-select" aria-label="Select ETF">
       <option value="ibit">IBIT — iShares Bitcoin Trust ETF</option>
       <option value="etha">ETHA — iShares Ethereum Trust ETF</option>
+      <option value="agg">AGG — iShares Core U.S. Aggregate Bond ETF</option>
     </select>
   </div>
 
@@ -379,7 +381,7 @@
       <div class="label">Shares Outstanding</div>
       <div class="value" id="etf-shares">—</div>
     </div>
-    <div class="etf-stat">
+    <div class="etf-stat" id="etf-asset-wrap">
       <div class="label">Asset Held</div>
       <div class="value" id="etf-asset">—</div>
     </div>
@@ -387,7 +389,7 @@
 
   <div class="table-wrap">
     <table aria-label="ETF holdings">
-      <thead>
+      <thead id="etf-thead">
         <tr>
           <th scope="col">Ticker</th>
           <th scope="col">Name</th>
@@ -416,10 +418,11 @@
   <div id="qtr-status" class="status-msg" role="status">Loading quarterly data…</div>
 </div>
 
+
 <script>
   let allData = [];
   let filtered = [];
-  let sortCol = "value_1000s";
+  let sortCol = "value_usd";
   let sortDir = -1;
   let page = 0;
   let pageSize = 50;
@@ -440,18 +443,11 @@
       document.getElementById("stat-value").textContent =
         totalT >= 1 ? `$${totalT.toFixed(2)}T` : `$${(json.total_value_usd / 1e9).toFixed(1)}B`;
 
-      const byKey = {};
-      json.holdings.forEach(h => {
-        const key = h.cusip || h.issuer;
-        if (!byKey[key]) byKey[key] = { ...h, value_1000s: 0, shares: 0 };
-        byKey[key].value_1000s += h.value_1000s || 0;
-        byKey[key].shares += h.shares || 0;
-      });
-      allData = Object.values(byKey)
-        .sort((a, b) => (b.value_1000s || 0) - (a.value_1000s || 0))
+      allData = [...json.holdings]
+        .sort((a, b) => (b.value_usd || 0) - (a.value_usd || 0))
         .slice(0, 20)
         .map((h, i) => ({ ...h, _origRank: i + 1 }));
-      maxVal = Math.max(...allData.map(h => h.value_1000s));
+      maxVal = Math.max(...allData.map(h => h.value_usd));
 
       document.getElementById("status").style.display = "none";
       applyFilters();
@@ -488,8 +484,8 @@
 
     tbody.innerHTML = slice.map((h, i) => {
       const rank = start + i + 1;
-      const valM = (h.value_1000s / 1000).toLocaleString("en-US", { maximumFractionDigits: 0 });
-      const barPct = Math.round((h.value_1000s / maxVal) * 120);
+      const valM = (h.value_usd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 0 });
+      const barPct = Math.round((h.value_usd / maxVal) * 120);
       const shares = h.shares.toLocaleString();
       const putCallBadge = h.putCall === "Call"
         ? `<span class="badge badge-call">CALL</span>`
@@ -574,14 +570,12 @@
   });
 
   // iShares ETF
-  const ETF_FILES = { ibit: "/data/ibit_holdings.json", etha: "/data/etha_holdings.json" };
-
   async function loadEtf(key) {
     const statusEl = document.getElementById("etf-status");
     statusEl.style.display = "";
     statusEl.textContent = "Loading…";
     try {
-      const res = await fetch(ETF_FILES[key]);
+      const res = await fetch(`/data/${key}_holdings.json`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json();
 
@@ -592,41 +586,67 @@
       const aum = d.total_market_value;
       document.getElementById("etf-aum").textContent =
         aum >= 1e9 ? `$${(aum / 1e9).toFixed(2)}B` : `$${(aum / 1e6).toFixed(2)}M`;
-
       document.getElementById("etf-shares").textContent =
         (d.shares_outstanding / 1e6).toFixed(1) + "M";
 
-      const primary = d.holdings.find(h => h.asset_class === "Alternative") || d.holdings[0];
-      document.getElementById("etf-asset").textContent = primary
-        ? `${primary.quantity.toLocaleString("en-US", { maximumFractionDigits: 3 })} ${primary.currency}`
-        : "—";
+      const isBond = d.type === "bond";
+      document.getElementById("etf-asset-wrap").style.display = isBond ? "none" : "";
 
-      const tbody = document.getElementById("etf-tbody");
-      tbody.innerHTML = d.holdings.map(h => {
-        const mv = h.market_value != null
-          ? "$" + h.market_value.toLocaleString("en-US", { maximumFractionDigits: 2 })
+      if (!isBond) {
+        const primary = d.holdings.find(h => h.asset_class === "Alternative") || d.holdings[0];
+        document.getElementById("etf-asset").textContent = primary
+          ? `${primary.quantity.toLocaleString("en-US", { maximumFractionDigits: 3 })} ${primary.currency}`
           : "—";
-        const wt = h.weight_pct != null ? h.weight_pct.toFixed(2) + "%" : "—";
-        const barW = h.weight_pct != null ? Math.round(h.weight_pct * 1.2) : 0;
-        const qty = h.quantity != null
-          ? h.quantity.toLocaleString("en-US", { maximumFractionDigits: 5 })
-          : "—";
+      }
 
-        return `<tr>
-          <td class="ticker">${h.ticker}</td>
-          <td class="issuer">${h.name}</td>
-          <td class="asset-class">${h.asset_class}</td>
-          <td class="value">${mv}</td>
-          <td class="weight">
-            <div class="weight-bar-wrap">
-              <div class="weight-bar" style="width:${barW}px"></div>
-              <span>${wt}</span>
-            </div>
-          </td>
-          <td class="qty">${qty}</td>
-          <td class="disc">${h.currency}</td>
-        </tr>`;
-      }).join("");
+      document.getElementById("etf-thead").innerHTML = isBond ? `<tr>
+        <th scope="col">Name</th>
+        <th scope="col">Sector</th>
+        <th scope="col">Asset Class</th>
+        <th scope="col" style="text-align:right">Market Value</th>
+        <th scope="col" style="text-align:right">Weight %</th>
+        <th scope="col">CUSIP</th>
+        <th scope="col" style="text-align:right">Coupon %</th>
+        <th scope="col">Maturity</th>
+        <th scope="col" style="text-align:right">Duration</th>
+        <th scope="col" style="text-align:right">YTM %</th>
+      </tr>` : `<tr>
+        <th scope="col">Ticker</th>
+        <th scope="col">Name</th>
+        <th scope="col">Asset Class</th>
+        <th scope="col" style="text-align:right">Market Value</th>
+        <th scope="col" style="text-align:right">Weight %</th>
+        <th scope="col" style="text-align:right">Quantity</th>
+        <th scope="col">Currency</th>
+      </tr>`;
+
+      const fmtMv = v => v != null ? "$" + v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
+      const fmtWt = (v, barClass) => {
+        const wt  = v != null ? v.toFixed(2) + "%" : "—";
+        const barW = v != null ? Math.round(v * 1.2) : 0;
+        return `<div class="${barClass}-wrap"><div class="${barClass}" style="width:${barW}px"></div><span>${wt}</span></div>`;
+      };
+
+      document.getElementById("etf-tbody").innerHTML = d.holdings.map(h => isBond ? `<tr>
+        <td class="issuer">${h.name}</td>
+        <td class="asset-class">${h.sector}</td>
+        <td class="asset-class">${h.asset_class}</td>
+        <td class="value">${fmtMv(h.market_value)}</td>
+        <td class="weight">${fmtWt(h.weight_pct, "weight-bar")}</td>
+        <td class="cusip">${h.cusip || "—"}</td>
+        <td class="qty">${h.coupon_pct != null ? h.coupon_pct.toFixed(2) + "%" : "—"}</td>
+        <td class="disc">${h.maturity || "—"}</td>
+        <td class="qty">${h.duration != null ? h.duration.toFixed(2) : "—"}</td>
+        <td class="qty">${h.ytm_pct != null ? h.ytm_pct.toFixed(2) + "%" : "—"}</td>
+      </tr>` : `<tr>
+        <td class="ticker">${h.ticker}</td>
+        <td class="issuer">${h.name}</td>
+        <td class="asset-class">${h.asset_class}</td>
+        <td class="value">${fmtMv(h.market_value)}</td>
+        <td class="weight">${fmtWt(h.weight_pct, "weight-bar")}</td>
+        <td class="qty">${h.quantity != null ? h.quantity.toLocaleString("en-US", { maximumFractionDigits: 5 }) : "—"}</td>
+        <td class="disc">${h.currency}</td>
+      </tr>`).join("");
 
       statusEl.style.display = "none";
     } catch (e) {
@@ -682,8 +702,8 @@
         for (let i = 0; i < n; i++) {
           const q = h.quarters[i];
           const shares = q.shares != null ? q.shares.toLocaleString() : "—";
-          const valM   = q.value_1000s != null
-            ? (q.value_1000s / 1000).toLocaleString("en-US", { maximumFractionDigits: 0 })
+          const valM   = q.value_usd != null
+            ? (q.value_usd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 0 })
             : "—";
           const sep = i === 0 ? "" : " sep";
           row += `<td class="num${sep}">${shares}</td><td class="num">${valM}</td>`;
@@ -691,10 +711,10 @@
           if (i < n - 1) {
             const delta = h.deltas[i];
             const sc = delta.shares > 0 ? "delta-pos" : delta.shares < 0 ? "delta-neg" : "delta-zero";
-            const vc = delta.value_1000s > 0 ? "delta-pos" : delta.value_1000s < 0 ? "delta-neg" : "delta-zero";
+            const vc = delta.value_usd > 0 ? "delta-pos" : delta.value_usd < 0 ? "delta-neg" : "delta-zero";
             const sfmt = delta.shares === 0 ? "—" : (delta.shares > 0 ? "+" : "") + delta.shares.toLocaleString();
-            const vfmt = delta.value_1000s === 0 ? "—"
-              : (delta.value_1000s > 0 ? "+" : "") + (delta.value_1000s / 1000).toLocaleString("en-US", { maximumFractionDigits: 0 });
+            const vfmt = delta.value_usd === 0 ? "—"
+              : (delta.value_usd > 0 ? "+" : "") + (delta.value_usd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 0 });
             row += `<td class="${sc} sep">${sfmt}</td><td class="${vc}">${vfmt}</td>`;
           }
         }

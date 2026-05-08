@@ -31,8 +31,9 @@ async function main() {
   for (const filing of sorted) {
     console.log(`  Fetching holdings for ${filing.reportDate}…`);
     const raw = await getEdgarHoldings(CIK, filing.accessionNumber);
-    const holdings = groupByCusip(raw);
-    console.log(`    ✓ ${raw.length} raw → ${holdings.length} unique CUSIPs`);
+    const sole = raw.filter(h => h.investDisc === "SOLE" && !h.putCall);
+    const holdings = groupByCusip(sole);
+    console.log(`    ✓ ${raw.length} raw → ${sole.length} SOLE → ${holdings.length} unique CUSIPs`);
     filingsData.push({ date: filing.reportDate, holdings });
   }
 

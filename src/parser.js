@@ -15,7 +15,7 @@ export async function parseInfoTableXml(xmlText) {
     issuer:      e["nameOfIssuer"]         || "",
     cusip:       e["cusip"]                || "",
     class:       e["titleOfClass"]         || "",
-    value_1000s: parseInt(e["value"] || 0),
+    value_usd:   parseInt(e["value"] || 0),
     shares:      parseInt(e["shrsOrPrnAmt"]?.["sshPrnamt"] || 0),
     investDisc:  e["investmentDiscretion"] || "",
     putCall:     e["putCall"]              || "",
